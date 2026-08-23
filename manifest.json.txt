@@ -1,0 +1,16 @@
+{
+  "short_name": "DiscretaPOS",
+  "name": "DISCRETA.CBO - POS System",
+  "icons": [
+    {
+      "src": "https://discretacbo.com/wp-content/uploads/2023/08/cropped-logo-discreta-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    }
+  ],
+  "start_url": "/index.html",
+  "background_color": "#121212",
+  "theme_color": "#4a154b",
+  "display": "standalone",
+  "orientation": "any"
+}

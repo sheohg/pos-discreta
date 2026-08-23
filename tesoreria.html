@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Módulo Tesorero - POS Discreta</title>
+    <!-- Bootstrap 5 & FontAwesome Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-main: #0d0f12;
+            --bg-card: #161b22;
+            --bg-card-hover: #1c2128;
+            --border-color: #30363d;
+            --accent-green: #00e676;
+            --accent-green-glow: rgba(0, 230, 118, 0.15);
+            --accent-purple: #8a2be2;
+        }
+
+        html, body {
+            height: 100vh;
+            max-height: 100vh;
+            overflow: hidden; /* Elimina el scroll del navegador */
+            background-color: var(--bg-main);
+            color: #f0f6fc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .main-wrapper {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 0.75rem 1.25rem;
+            box-sizing: border-box;
+        }
+
+        /* Compact Header */
+        .header-panel {
+            background: rgba(22, 27, 34, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.5rem 1rem;
+            flex-shrink: 0;
+        }
+
+        /* Compact Hero Card */
+        .patrimonio-card {
+            background: linear-gradient(135deg, rgba(15, 43, 29, 0.8) 0%, rgba(22, 27, 34, 0.95) 100%);
+            border: 1px solid rgba(0, 230, 118, 0.3);
+            border-radius: 12px;
+            padding: 0.75rem 1.25rem;
+            box-shadow: 0 4px 20px -5px var(--accent-green-glow);
+            flex-shrink: 0;
+        }
+
+        /* Flexible Grid Container */
+        .grid-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* Necesario para contener el desbordamiento si hay muchas carteras */
+        }
+
+        .carteras-scroll {
+            overflow-y: auto;
+            padding-right: 4px;
+            height: 100%;
+        }
+
+        /* Estilo de Scrollbar Discreto */
+        .carteras-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+        .carteras-scroll::-webkit-scrollbar-track {
+            background: var(--bg-main);
+        }
+        .carteras-scroll::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        /* Compact Carteras Cards */
+        .cartera-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .cartera-card:hover {
+            transform: translateY(-2px);
+            border-color: #484f58;
+            background-color: var(--bg-card-hover);
+        }
+
+        .badge-moneda {
+            font-size: 0.7rem;
+            padding: 0.2em 0.5em;
+            border-radius: 6px;
+            font-weight: 700;
+        }
+
+        .badge-bs {
+            background: rgba(255, 152, 0, 0.15);
+            color: #ff9800;
+            border: 1px solid rgba(255, 152, 0, 0.3);
+        }
+
+        .badge-usd {
+            background: rgba(33, 150, 243, 0.15);
+            color: #64b5f6;
+            border: 1px solid rgba(33, 150, 243, 0.3);
+        }
+
+        /* Controls */
+        .form-control-dark {
+            background-color: #0d1117;
+            border: 1px solid var(--border-color);
+            color: #f0f6fc;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .form-control-dark:focus {
+            background-color: #0d1117;
+            border-color: var(--accent-green);
+            color: #f0f6fc;
+            box-shadow: 0 0 0 0.2rem var(--accent-green-glow);
+        }
+
+        .btn-green {
+            background-color: var(--accent-green);
+            color: #000;
+            font-weight: 700;
+            border: none;
+            border-radius: 8px;
+        }
+
+        .btn-green:hover {
+            background-color: #00c853;
+            color: #000;
+        }
+
+        .btn-purple {
+            background: linear-gradient(135deg, #8a2be2 0%, #6a1b9a 100%);
+            color: #fff;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+        }
+
+        .modal-content-dark {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            color: #f0f6fc;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-wrapper gap-2">
+        
+        <!-- HEADER COMPACTO -->
+        <div class="header-panel d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <div class="bg-dark px-2 py-1 rounded border border-secondary text-success">
+                    <i class="fa-solid fa-vault"></i>
+                </div>
+                <h5 class="m-0 fw-bold">Módulo Tesorero</h5>
+            </div>
+
+            <div class="d-flex align-items-center gap-2 ms-auto">
+                <div class="input-group input-group-sm" style="max-width: 220px;">
+                    <span class="input-group-text bg-dark text-white-50 border-secondary small">Tasa BCV:</span>
+                    <input type="number" id="inputTasaBCV" class="form-control form-control-dark fw-bold text-success" step="0.01" placeholder="0.00">
+                    <button class="btn btn-green px-2" onclick="guardarTasaBCV()" title="Guardar Tasa">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                    </button>
+                </div>
+
+                <button class="btn btn-purple btn-sm px-3 py-1" data-bs-toggle="modal" data-bs-target="#modalTransferir">
+                    <i class="fa-solid fa-arrow-transfer-exchange me-1"></i> Transferir
+                </button>
+
+                <button class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="cargarDatosTesoreria()" title="Recargar">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- RESUMEN PATRIMONIO COMPACTO -->
+        <div class="patrimonio-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-white-50 text-uppercase fw-semibold" style="font-size: 0.75rem;">
+                        <i class="fa-solid fa-chart-line me-1 text-success"></i> Patrimonio Total Estimado en Tesorería
+                    </span>
+                    <h2 class="fw-bold text-success m-0 my-0" id="patrimonioTotal">$0.00</h2>
+                    <small class="text-white-50" style="font-size: 0.7rem;">Consolidado dinámico indexado a Tasa BCV</small>
+                </div>
+                <div>
+                    <span class="badge bg-dark border border-secondary px-2 py-1 rounded-pill text-white-50 small">
+                        <i class="fa-regular fa-clock me-1"></i> Tiempo real
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- GRID DE CARTERAS -->
+        <div class="grid-container">
+            <div class="d-flex justify-content-between align-items-center my-1">
+                <small class="fw-bold text-white-50">
+                    <i class="fa-solid fa-wallet me-1"></i>Carteras Disponibles
+                </small>
+            </div>
+
+            <div class="carteras-scroll">
+                <div class="row g-2" id="contenedorCarteras">
+                    <!-- Loader State -->
+                    <div class="col-12 text-center text-white-50 py-4">
+                        <div class="spinner-border spinner-border-sm text-success mb-1" role="status"></div>
+                        <div class="small">Cargando carteras...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL TRANSFERIR -->
+    <div class="modal fade" id="modalTransferir" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-content-dark">
+                <div class="modal-header border-bottom border-secondary py-2">
+                    <h6 class="modal-title fw-bold">
+                        <i class="fa-solid fa-right-left text-purple me-2"></i>Transferencia entre Carteras
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formTransferencia">
+                        <div class="mb-2">
+                            <label class="form-label text-white-50 small mb-1">Origen</label>
+                            <select class="form-select form-control-dark" id="selectOrigen"></select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label text-white-50 small mb-1">Destino</label>
+                            <select class="form-select form-control-dark" id="selectDestino"></select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label text-white-50 small mb-1">Monto a Transferir</label>
+                            <input type="number" step="0.01" class="form-control form-control-dark" id="montoTransferir" placeholder="0.00">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer border-top border-secondary py-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-sm btn-purple" onclick="alert('Función lista para conectar backend.')">Procesar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_URL = 'api.php';
+        let carterasGlobal = [];
+
+        async function cargarDatosTesoreria() {
+            try {
+                const res = await fetch(`${API_URL}?endpoint=get_tesoreria`);
+                const data = await res.json();
+
+                if (data.status === 200 || data.success) {
+                    const payload = data.data || data;
+                    carterasGlobal = payload.carteras || [];
+                    
+                    if (payload.tasa_bcv) {
+                        document.getElementById('inputTasaBCV').value = parseFloat(payload.tasa_bcv).toFixed(2);
+                    }
+
+                    if (payload.total_patrimonio_usd !== undefined) {
+                        document.getElementById('patrimonioTotal').textContent = `$${parseFloat(payload.total_patrimonio_usd).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    }
+
+                    renderizarCarteras(carterasGlobal);
+                    poblarSelectsModal(carterasGlobal);
+                } else {
+                    alert('Error al obtener datos: ' + (data.message || 'Error de conexión'));
+                }
+            } catch (err) {
+                console.error('Error cargando tesorería:', err);
+                document.getElementById('contenedorCarteras').innerHTML = `
+                    <div class="col-12 text-center text-danger py-3 small">
+                        <i class="fa-solid fa-triangle-exclamation mb-1"></i> Error de conexión con API POS.
+                    </div>`;
+            }
+        }
+
+        function renderizarCarteras(carteras) {
+            const container = document.getElementById('contenedorCarteras');
+            container.innerHTML = '';
+
+            if (carteras.length === 0) {
+                container.innerHTML = `<div class="col-12 text-center text-white-50 small py-3">No hay carteras registradas.</div>`;
+                return;
+            }
+
+            carteras.forEach(c => {
+                const saldo = parseFloat(c.saldo_actual || 0);
+                const equivUSD = parseFloat(c.equivalente_usd || 0);
+                const esBs = (c.moneda || '').toUpperCase() === 'BS';
+
+                const cardHTML = `
+                    <div class="col-12 col-sm-6 col-md-3">
+                        <div class="cartera-card d-flex flex-column justify-content-between h-100">
+                            <div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="badge-moneda ${esBs ? 'badge-bs' : 'badge-usd'}">${c.moneda}</span>
+                                    <span class="text-white-50 font-monospace" style="font-size: 0.65rem;">${c.codigo_metodo || ''}</span>
+                                </div>
+                                <div class="fw-bold text-white text-truncate small" title="${c.nombre}">${c.nombre}</div>
+                            </div>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold text-white">
+                                    ${esBs ? 'Bs ' : '$'}${saldo.toLocaleString('es-VE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                </div>
+                                ${esBs ? `<div class="text-success fw-semibold" style="font-size: 0.7rem;">≈ $${equivUSD.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} USD</div>` : '<div class="text-white-50" style="font-size: 0.7rem;">Saldo en Divisa</div>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += cardHTML;
+            });
+        }
+
+        function poblarSelectsModal(carteras) {
+            const selOrigen = document.getElementById('selectOrigen');
+            const selDestino = document.getElementById('selectDestino');
+            if(!selOrigen || !selDestino) return;
+
+            selOrigen.innerHTML = '';
+            selDestino.innerHTML = '';
+
+            carteras.forEach(c => {
+                const opt = `<option value="${c.id}">${c.nombre} (${c.moneda} ${c.saldo_actual})</option>`;
+                selOrigen.innerHTML += opt;
+                selDestino.innerHTML += opt;
+            });
+        }
+
+        async function guardarTasaBCV() {
+            const nuevaTasa = parseFloat(document.getElementById('inputTasaBCV').value);
+            if (!nuevaTasa || nuevaTasa <= 0) {
+                alert('Ingrese un monto de tasa válido.');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}?endpoint=set_bcv_rate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tasa: nuevaTasa })
+                });
+                const data = await res.json();
+
+                if (data.status === 200 || data.success) {
+                    cargarDatosTesoreria();
+                } else {
+                    alert('Error guardando la tasa: ' + data.message);
+                }
+            } catch (err) {
+                alert('Error de red al intentar guardar la tasa.');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', cargarDatosTesoreria);
+    </script>
+</body>
+</html>

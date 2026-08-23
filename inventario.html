@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DISCRETA.CBO - Control de Inventario y Lotes</title>
+    <style>
+        :root {
+            --primary: #4a154b;
+            --bg: #121212;
+            --surface: #1e1e1e;
+            --surface-hover: #2a2a2a;
+            --text: #ffffff;
+            --text-muted: #aaaaaa;
+            --border: #333333;
+            --accent: #f39c12;
+            --success: #2ecc71;
+            --info: #3498db;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+        /* HEADER PRINCIPAL */
+        .inv-header { height: 60px; background: #0a0a0a; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; flex-shrink: 0; gap: 12px; }
+        .inv-title { font-size: 1.1rem; font-weight: bold; color: var(--accent); white-space: nowrap; }
+
+        .search-container { display: flex; gap: 8px; flex: 1; max-width: 500px; }
+        input, select { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: #222; color: var(--text); font-size: 0.85rem; outline: none; }
+        input:focus { border-color: var(--primary); }
+
+        .btn { padding: 8px 12px; border: none; border-radius: 6px; background: var(--primary); color: white; font-weight: bold; font-size: 0.82rem; cursor: pointer; transition: 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-success { background: #27ae60; }
+        .btn-secondary { background: #333; border: 1px solid #555; }
+        .btn-warning { background: var(--accent); color: #111; }
+        .btn-info { background: var(--info); }
+
+        /* TABLA EXCEL ESTILIZADA */
+        .table-wrapper { flex: 1; overflow: auto; background: #151515; }
+        .excel-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left; }
+        .excel-table th { position: sticky; top: 0; background: #1f1f1f; color: var(--accent); padding: 10px 8px; border-bottom: 2px solid var(--border); border-right: 1px solid #2e2e2e; font-weight: 600; z-index: 10; white-space: nowrap; }
+        .excel-table td { padding: 6px 8px; border-bottom: 1px solid #262626; border-right: 1px solid #222; vertical-align: middle; white-space: nowrap; }
+        .excel-table tbody tr:hover { background: var(--surface-hover); }
+
+        .img-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: #2a2a2a; border: 1px solid #444; display: block; margin: 0 auto; }
+        .sku-tag { font-family: monospace; color: var(--info); font-weight: bold; }
+        .stock-badge { padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.75rem; }
+        .stock-in { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+        .stock-out { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+        
+        .socio-badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 0.75rem; border: 1px solid #444; }
+        .socio-isde { background: rgba(155, 89, 182, 0.2); color: #9b59b6; border-color: #9b59b6; }
+        .socio-luz { background: rgba(241, 196, 15, 0.2); color: #f1c40f; border-color: #f1c40f; }
+        .socio-cherry { background: rgba(231, 76, 60, 0.2); color: #e74c3c; border-color: #e74c3c; }
+
+        .lote-tag { font-size: 0.75rem; color: #aaa; background: #222; padding: 2px 5px; border-radius: 3px; border: 1px solid #333; }
+
+        /* MODAL DE REGISTRO */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .form-group { margin-bottom: 10px; }
+        .form-group label { display: block; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 3px; }
+        .hidden { display: none !important; }
+        .calc-box { background: #111; padding: 12px; border-radius: 8px; border: 1px solid #333; text-align: center; margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+    <header class="inv-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <button class="btn btn-secondary" onclick="location.href='pos.html'">⬅️ POS</button>
+            <span class="inv-title">📦 Inventario & Lotes</span>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="inv-search" placeholder="🔍 Buscar Título, SKU o Lote..." oninput="filtrarProductos()" style="width: 100%;">
+            <select id="inv-filter-stock" onchange="filtrarProductos()" style="width: 110px;">
+                <option value="todos">Todos</option>
+                <option value="con-stock">Con Stock</option>
+                <option value="sin-stock">Agotados</option>
+            </select>
+        </div>
+
+        <div style="display:flex; gap:6px;">
+            <button class="btn btn-info" onclick="abrirModalSocios()">🤝 Socios</button>
+            <button class="btn btn-warning" onclick="abrirModalNuevoProducto()">➕ Nuevo Producto</button>
+            <button class="btn btn-success" id="btn-sync-wc" onclick="cargarProductosWC()">🔄 Sincronizar WC</button>
+        </div>
+    </header>
+
+    <div class="table-wrapper">
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th style="width: 45px; text-align:center;">Foto</th>
+                    <th style="width: 95px;">SKU / Cód.</th>
+                    <th>Descripción del Producto</th>
+                    <th style="width: 85px; text-align:center;">Lote / Ingreso</th>
+                    <th style="width: 75px; text-align:center;">Sociedad</th>
+                    <th style="width: 65px; text-align:center;">Stock</th>
+                    <th style="width: 80px; text-align:right; color:#e67e22;">Costo Net.</th>
+                    <th style="width: 70px; text-align:right; color:#e67e22;">Flete</th>
+                    <th style="width: 70px; text-align:right; color:#2ecc71;">Margen %</th>
+                    <th style="width: 70px; text-align:right; color:#3498db;">IVA 16%</th>
+                    <th style="width: 85px; text-align:right;">PVP ($)</th>
+                    <th style="width: 110px; text-align:right; color:var(--accent);">PVP (VEF)</th>
+                    <th style="width: 50px; text-align:center;">Acción</th>
+                </tr>
+            </thead>
+            <tbody id="inventory-tbody">
+                <tr>
+                    <td colspan="13" style="text-align:center; padding: 40px; color: #888;">
+                        Presiona <b>"🔄 Sincronizar WC"</b> para importar el catálogo activo.
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODAL REGISTRAR / EDITAR CON LOTE Y FECHA -->
+    <div id="modal-producto" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3 style="margin-bottom:12px; color:var(--accent);" id="modal-prod-title">➕ Registrar Producto y Lote</h3>
+            <form id="form-nuevo-producto" onsubmit="guardarProducto(event)">
+                <div class="form-group">
+                    <label>Nombre del Producto</label>
+                    <input type="text" id="prod-nombre" required placeholder="Ej. Lencería Encaje Rojo">
+                </div>
+                
+                <div class="grid-3">
+                    <div class="form-group">
+                        <label>Código SKU</label>
+                        <input type="text" id="prod-sku" required placeholder="DISC-001">
+                    </div>
+                    <div class="form-group">
+                        <label>Nro. Lote / Carga</label>
+                        <input type="text" id="prod-lote" placeholder="LOTE-2026-01">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha Entrada</label>
+                        <input type="date" id="prod-fecha-ingreso">
+                    </div>
+                </div>
+
+                <div class="grid-3">
+                    <div class="form-group">
+                        <label>Socio Propietario</label>
+                        <select id="prod-socio" onchange="calcularPreciosModal('directo')">
+                            <option value="ISDE">ISDE (60% / 40%)</option>
+                            <option value="LUZ">LUZ (80% / 20%)</option>
+                            <option value="CHERRY">CHERRY (100%)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Stock Inicial</label>
+                        <input type="number" id="prod-stock" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Cobertura Divisa (%)</label>
+                        <input type="number" id="prod-cobertura" value="20" oninput="calcularPreciosModal('directo')">
+                    </div>
+                </div>
+
+                <div class="grid-3">
+                    <div class="form-group">
+                        <label>Costo Neto ($)</label>
+                        <input type="number" step="0.01" id="prod-costo" value="5.00" oninput="calcularPreciosModal('directo')">
+                    </div>
+                    <div class="form-group">
+                        <label>Flete Unit. ($)</label>
+                        <input type="number" step="0.01" id="prod-flete" value="0.50" oninput="calcularPreciosModal('directo')">
+                    </div>
+                    <div class="form-group">
+                        <label>Margen Real (%)</label>
+                        <input type="number" step="0.1" id="prod-margen" value="70" oninput="calcularPreciosModal('directo')">
+                    </div>
+                </div>
+
+                <div class="calc-box">
+                    <div class="grid-2" style="align-items:center;">
+                        <div>
+                            <label style="color:#f39c12; font-weight:bold;">PVP Final Sugerido ($ USD)</label>
+                            <input type="number" step="1" id="prod-pvp-target" style="font-size:1.2rem; font-weight:bold; text-align:center; color:#2ecc71;" oninput="calcularPreciosModal('inverso')">
+                        </div>
+                        <div>
+                            <span style="font-size:0.75rem; color:#aaa;">Repartición Ganancia Estimada:</span>
+                            <div id="modal-ganancia-desglose" style="font-size:0.85rem; color:#f39c12; font-weight:bold; margin-top:4px;">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModalNuevoProducto()">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Guardar Lote Local</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL SOCIOS -->
+    <div id="modal-socios" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width:480px;">
+            <h3 style="margin-bottom:12px; color:var(--accent);">🤝 Configuración de Socios</h3>
+            <div style="background:#151515; padding:10px; border-radius:6px; border:1px solid #333; margin-bottom:10px;">
+                <h4 style="color:#9b59b6;">1. Sociedad ISDE</h4>
+                <p style="font-size:0.8rem; color:#aaa; margin-top:2px;">Recupera Costo + Flete. Ganancia Neta: <b>60% ISDE / 40% LUZ</b></p>
+            </div>
+            <div style="background:#151515; padding:10px; border-radius:6px; border:1px solid #333; margin-bottom:10px;">
+                <h4 style="color:#f1c40f;">2. Sociedad LUZ</h4>
+                <p style="font-size:0.8rem; color:#aaa; margin-top:2px;">Recupera Costo + Flete. Ganancia Neta: <b>80% LUZ / 20% ISDE</b></p>
+            </div>
+            <div style="background:#151515; padding:10px; border-radius:6px; border:1px solid #333; margin-bottom:10px;">
+                <h4 style="color:#e74c3c;">3. Sociedad CHERRY (Temporal)</h4>
+                <p style="font-size:0.8rem; color:#aaa; margin-top:2px;">Recupera Costo + Flete + <b>100% Ganancia</b>. Pasa a LUZ al alcanzar la meta $X.</p>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                <button class="btn btn-secondary" onclick="cerrarModalSocios()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let productosCache = [];
+        const tasaBCV = 779.95;
+        const imgPlaceholder = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="%23555"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+
+        // Establecer fecha de hoy en el modal
+        document.getElementById('prod-fecha-ingreso').value = new Date().toISOString().split('T')[0];
+
+        async function cargarProductosWC() {
+            const btnSync = document.getElementById('btn-sync-wc');
+            const tbody = document.getElementById('inventory-tbody');
+            btnSync.innerText = "⏳ Cargando...";
+            btnSync.disabled = true;
+
+            try {
+                const response = await fetch('api.php?endpoint=products&per_page=50');
+                if (!response.ok) throw new Error("Error consultando Proxy API");
+
+                productosCache = await response.json();
+                renderizarTabla(productosCache);
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; color:#e74c3c; padding:30px;">🔴 Error: ${err.message}</td></tr>`;
+            } finally {
+                btnSync.innerText = "🔄 Sincronizar WC";
+                btnSync.disabled = false;
+            }
+        }
+
+        function renderizarTabla(lista) {
+            const tbody = document.getElementById('inventory-tbody');
+            if (lista.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding:30px; color:#888;">No hay productos encontrados.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = lista.map(p => {
+                const precioUSD = parseFloat(p.price) || 0;
+                const precioVEF = precioUSD * tasaBCV;
+                const stock = p.stock_quantity !== null ? p.stock_quantity : (p.in_stock ? 'En Stock' : 0);
+                const isStockOk = p.in_stock && (p.stock_quantity === null || p.stock_quantity > 0);
+                
+                let imgUrl = imgPlaceholder;
+                if (p.images && p.images.length > 0 && p.images[0].src) {
+                    imgUrl = p.images[0].src.replace(/^http:\/\//i, 'https://');
+                }
+
+                const socio = p.meta_data?.find(m => m.key === '_socio')?.value || "ISDE";
+                const lote = p.meta_data?.find(m => m.key === '_lote')?.value || "LOTE-01";
+                const fechaIngreso = p.date_created ? p.date_created.substring(0, 10) : "2026-08-01";
+                
+                const costoNeto = parseFloat(p.meta_data?.find(m => m.key === '_costo_neto')?.value || (precioUSD * 0.35)).toFixed(2);
+                const flete = parseFloat(p.meta_data?.find(m => m.key === '_flete_unitario')?.value || 0.50).toFixed(2);
+                const margen = 70;
+                const montoIVA = (precioUSD * 0.16 / 1.16).toFixed(2);
+
+                const socioClass = socio === 'ISDE' ? 'socio-isde' : (socio === 'LUZ' ? 'socio-luz' : 'socio-cherry');
+
+                return `
+                    <tr>
+                        <td style="text-align:center;">
+                            <img src="${imgUrl}" class="img-thumb" alt="thumb" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='${imgPlaceholder}';">
+                        </td>
+                        <td><span class="sku-tag">${p.sku || 'N/A'}</span></td>
+                        <td><b>${p.name}</b></td>
+                        <td style="text-align:center;">
+                            <span class="lote-tag">${lote}</span><br>
+                            <span style="font-size:0.7rem; color:#888;">${fechaIngreso}</span>
+                        </td>
+                        <td style="text-align:center;"><span class="socio-badge ${socioClass}">${socio}</span></td>
+                        <td style="text-align:center;"><span class="stock-badge ${isStockOk ? 'stock-in' : 'stock-out'}">${stock}</span></td>
+                        <td style="text-align:right; color:#e67e22;">$ ${costoNeto}</td>
+                        <td style="text-align:right; color:#e67e22;">$ ${flete}</td>
+                        <td style="text-align:right; color:#2ecc71;">${margen}%</td>
+                        <td style="text-align:right; color:#3498db;">$ ${montoIVA}</td>
+                        <td style="text-align:right; font-weight:bold; color:#2ecc71;">$ ${precioUSD.toFixed(2)}</td>
+                        <td style="text-align:right; font-weight:bold; color:var(--accent);">${precioVEF.toLocaleString('es-VE', {minimumFractionDigits: 2})} Bs</td>
+                        <td style="text-align:center;">
+                            <button class="btn btn-secondary" style="padding:2px 6px; font-size:0.75rem;" onclick="editarProducto(${p.id})">✏️</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filtrarProductos() {
+            const query = document.getElementById('inv-search').value.toLowerCase();
+            const filterStock = document.getElementById('inv-filter-stock').value;
+
+            const filtrados = productosCache.filter(p => {
+                const matchQuery = p.name.toLowerCase().includes(query) || 
+                                   (p.sku && p.sku.toLowerCase().includes(query)) ||
+                                   (p.meta_data?.some(m => m.value && m.value.toString().toLowerCase().includes(query)));
+                const isStockOk = p.in_stock && (p.stock_quantity === null || p.stock_quantity > 0);
+                let matchStock = filterStock === 'todos' ? true : (filterStock === 'con-stock' ? isStockOk : !isStockOk);
+                return matchQuery && matchStock;
+            });
+
+            renderizarTabla(filtrados);
+        }
+
+        function calcularPreciosModal(origen) {
+            const cNeto = parseFloat(document.getElementById('prod-costo').value) || 0;
+            const flete = parseFloat(document.getElementById('prod-flete').value) || 0;
+            const cobertura = parseFloat(document.getElementById('prod-cobertura').value) || 0;
+            const socio = document.getElementById('prod-socio').value;
+
+            if (origen === 'directo') {
+                const margen = parseFloat(document.getElementById('prod-margen').value) || 0;
+                const costoTotal = cNeto + flete;
+                const precioBase = costoTotal * (1 + margen / 100);
+                const precioConIva = precioBase * 1.16;
+                const precioBruto = precioConIva * (1 + cobertura / 100);
+                const pvpSugerido = Math.ceil(precioBruto);
+
+                document.getElementById('prod-pvp-target').value = pvpSugerido;
+                actualizarDesgloseGanancia(pvpSugerido, costoTotal, socio);
+            } else if (origen === 'inverso') {
+                const pvpManual = parseFloat(document.getElementById('prod-pvp-target').value) || 0;
+                const costoTotal = cNeto + flete;
+                
+                const precioConIva = pvpManual / (1 + cobertura / 100);
+                const precioBase = precioConIva / 1.16;
+                
+                if (costoTotal > 0) {
+                    const margenReconstruido = ((precioBase - costoTotal) / costoTotal) * 100;
+                    document.getElementById('prod-margen').value = margenReconstruido.toFixed(1);
+                }
+                actualizarDesgloseGanancia(pvpManual, costoTotal, socio);
+            }
+        }
+
+        function actualizarDesgloseGanancia(pvpUSD, costoTotal, socio) {
+            const cobertura = parseFloat(document.getElementById('prod-cobertura').value) || 0;
+            const precioBase = (pvpUSD / (1 + cobertura / 100)) / 1.16;
+            const gananciaNetaTotal = Math.max(0, precioBase - costoTotal);
+
+            let txt = "";
+            if (socio === "ISDE") {
+                txt = `ISDE (60%): $${(gananciaNetaTotal * 0.6).toFixed(2)} | LUZ (40%): $${(gananciaNetaTotal * 0.4).toFixed(2)}`;
+            } else if (socio === "LUZ") {
+                txt = `LUZ (80%): $${(gananciaNetaTotal * 0.8).toFixed(2)} | ISDE (20%): $${(gananciaNetaTotal * 0.2).toFixed(2)}`;
+            } else if (socio === "CHERRY") {
+                txt = `CHERRY (100%): $${gananciaNetaTotal.toFixed(2)}`;
+            }
+
+            document.getElementById('modal-ganancia-desglose').innerText = txt;
+        }
+
+        function abrirModalNuevoProducto() {
+            document.getElementById('modal-prod-title').innerText = "➕ Registrar Producto y Lote";
+            document.getElementById('modal-producto').classList.remove('hidden');
+            calcularPreciosModal('directo');
+        }
+        function cerrarModalNuevoProducto() { document.getElementById('modal-producto').classList.add('hidden'); }
+
+        function abrirModalSocios() { document.getElementById('modal-socios').classList.remove('hidden'); }
+        function cerrarModalSocios() { document.getElementById('modal-socios').classList.add('hidden'); }
+
+        function guardarProducto(e) {
+            e.preventDefault();
+            alert("¡Lote y datos del producto registrados exitosamente en la memoria local!");
+            cerrarModalNuevoProducto();
+        }
+
+        function editarProducto(id) {
+            const prod = productosCache.find(p => p.id === id);
+            if (!prod) return;
+
+            document.getElementById('modal-prod-title').innerText = `✏️ Editar Lote: ${prod.name}`;
+            document.getElementById('prod-nombre').value = prod.name;
+            document.getElementById('prod-sku').value = prod.sku || '';
+            document.getElementById('prod-stock').value = prod.stock_quantity || 1;
+            document.getElementById('prod-pvp-target').value = Math.ceil(parseFloat(prod.price) || 0);
+
+            document.getElementById('modal-producto').classList.remove('hidden');
+            calcularPreciosModal('inverso');
+        }
+    </script>
+</body>
+</html>

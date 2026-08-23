@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DISCRETA.CBO - POS System</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4a154b">
+    <style>
+        :root {
+            --primary: #4a154b;
+            --secondary: #6b1d6e;
+            --accent: #25d366;
+            --bg: #121212;
+            --surface: #1e1e1e;
+            --text: #ffffff;
+            --text-muted: #aaaaaa;
+            --border: #333333;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; }
+
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 100%; max-width: 480px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        h1, h2 { color: var(--text); text-align: center; margin-bottom: 20px; font-weight: 600; }
+        .logo-title { font-size: 1.8rem; color: #f39c12; letter-spacing: 1px; }
+
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px; }
+        input, select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: #2a2a2a; color: var(--text); font-size: 1rem; outline: none; }
+        input:focus { border-color: var(--primary); }
+
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; background: var(--primary); color: white; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px; }
+        .btn:hover { background: var(--secondary); }
+        .btn-success { background: #27ae60; }
+        .btn-success:hover { background: #219150; }
+
+        .checkbox-group { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--text-muted); margin-top: 10px; }
+        .checkbox-group input { width: auto; }
+
+        .hidden { display: none !important; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .status-badge { padding: 8px; border-radius: 6px; text-align: center; font-size: 0.85rem; font-weight: bold; margin-top: 15px; }
+        .status-success { background: rgba(39, 174, 96, 0.2); color: #2ecc71; border: 1px solid #27ae60; }
+        .status-error { background: rgba(231, 76, 60, 0.2); color: #e74c3c; border: 1px solid #c0392b; }
+        
+        .preview-box { background: #111; padding: 12px; border-radius: 8px; border: 1px dashed #444; margin-top: 15px; text-align: center; }
+        .preview-value { font-size: 1.6rem; color: #2ecc71; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <!-- PANTALLA 1: LOGIN -->
+    <div id="view-login" class="card">
+        <h1 class="logo-title">DISCRETA.CBO</h1>
+        <h2>Iniciar Sesión</h2>
+        <form id="form-login">
+            <div class="form-group">
+                <label for="username">Usuario</label>
+                <input type="text" id="username" required placeholder="admin / vendedor">
+            </div>
+            <div class="form-group">
+                <label for="password">Contraseña</label>
+                <input type="password" id="password" required placeholder="••••••••">
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="remember-me" checked>
+                <label for="remember-me" style="margin:0;">Mantener sesión activa</label>
+            </div>
+            <button type="submit" class="btn">Entrar al Sistema</button>
+        </form>
+    </div>
+
+    <!-- PANTALLA 2: PANEL CONFIGURACIÓN Y PRUEBA (SOLO ADMIN) -->
+    <div id="view-admin" class="card hidden" style="max-width: 600px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h2>Configuración & Verificación</h2>
+            <button id="btn-logout" class="btn" style="width:auto; padding:6px 12px; margin:0; background:#c0392b;">Salir</button>
+        </div>
+
+        <!-- PARAMETROS GLOBALES DE PRECIOS -->
+        <div class="form-group grid-2">
+            <div>
+                <label>Tasa BCV (VEF)</label>
+                <input type="number" step="0.01" id="cfg-bcv" value="779.95">
+            </div>
+            <div>
+                <label>Margen Ganancia (%)</label>
+                <input type="number" id="cfg-margen" value="75">
+            </div>
+        </div>
+        <div class="form-group grid-2">
+            <div>
+                <label>Cobertura Divisa (%)</label>
+                <input type="number" id="cfg-cobertura" value="20">
+            </div>
+            <div>
+                <label>Rol Actual</label>
+                <input type="text" id="user-role" value="ADMINISTRADOR" disabled style="color:#f39c12; font-weight:bold;">
+            </div>
+        </div>
+
+        <hr style="border-color:#333; margin: 20px 0;">
+
+        <!-- PRUEBA DE MOTOR DE CÁLCULO Y REDONDEO SUPERIOR -->
+        <h3 style="font-size:1.05rem; margin-bottom:10px; color:#f39c12;">🧮 Test Motor de Precios (Redondeo Techo)</h3>
+        <div class="form-group grid-2">
+            <div>
+                <label>Costo Neto (USD)</label>
+                <input type="number" step="0.01" id="test-costo" value="4.00">
+            </div>
+            <div>
+                <label>Flete (USD)</label>
+                <input type="number" step="0.01" id="test-flete" value="1.00">
+            </div>
+        </div>
+
+        <div class="preview-box">
+            <span style="font-size:0.8rem; color:#aaa;">PVP Sugerido Calculado (Con Redondeo Superior):</span>
+            <div id="test-pvp-result" class="preview-value">$ 11.00 USD</div>
+            <div id="test-bs-result" style="font-size:0.9rem; color:#f39c12; margin-top:4px;">8.579,45 VEF</div>
+        </div>
+
+        <hr style="border-color:#333; margin: 20px 0;">
+
+        <!-- PRUEBA CONEXIÓN WOOCOMMERCE -->
+        <h3 style="font-size:1.05rem; margin-bottom:10px;">🔌 Test de Conexión WooCommerce</h3>
+        <button id="btn-test-wc" class="btn btn-success">Probar API WooCommerce</button>
+        <div id="wc-status" class="status-badge hidden"></div>
+    </div>
+
+<script>
+        // ELEMENTOS DOM
+        const viewLogin = document.getElementById('view-login');
+        const viewAdmin = document.getElementById('view-admin');
+        const formLogin = document.getElementById('form-login');
+        const btnLogout = document.getElementById('btn-logout');
+
+        // ELEMENTOS CÁLCULO
+        const inputBcv = document.getElementById('cfg-bcv');
+        const inputMargen = document.getElementById('cfg-margen');
+        const inputCobertura = document.getElementById('cfg-cobertura');
+        const testCosto = document.getElementById('test-costo');
+        const testFlete = document.getElementById('test-flete');
+        const testPvpResult = document.getElementById('test-pvp-result');
+        const testBsResult = document.getElementById('test-bs-result');
+
+        // INICIALIZACIÓN Y PERSISTENCIA DE SESIÓN
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('pwa_token') || sessionStorage.getItem('pwa_token');
+            if (token) {
+                showAdminView();
+            }
+            recalcularTest();
+        });
+
+        // MANEJO DE LOGIN
+        formLogin.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value.trim();
+            const remember = document.getElementById('remember-me').checked;
+
+            if (user && pass) {
+                const token = btoa(`${user}:${Date.now()}`);
+                if (remember) {
+                    localStorage.setItem('pwa_token', token);
+                } else {
+                    sessionStorage.setItem('pwa_token', token);
+                }
+                showAdminView();
+            }
+        });
+
+        btnLogout.addEventListener('click', () => {
+            localStorage.removeItem('pwa_token');
+            sessionStorage.removeItem('pwa_token');
+            viewAdmin.classList.add('hidden');
+            viewLogin.classList.remove('hidden');
+        });
+
+        function showAdminView() {
+            viewLogin.classList.add('hidden');
+            viewAdmin.classList.remove('hidden');
+        }
+
+        // MOTOR DE CÁLCULO DE PRECIO (REDONDEO TECHO)
+        function calcularPVP(costoNeto, flete, pctMargen, pctCobertura) {
+            const costoTotal = costoNeto + flete;
+            const factorMargen = 1 + (pctMargen / 100);
+            const factorCobertura = 1 + (pctCobertura / 100);
+            const precioBruto = costoTotal * factorMargen * factorCobertura;
+            return Math.ceil(precioBruto);
+        }
+
+        function recalcularTest() {
+            const cNeto = parseFloat(testCosto.value) || 0;
+            const flete = parseFloat(testFlete.value) || 0;
+            const margen = parseFloat(inputMargen.value) || 0;
+            const cobertura = parseFloat(inputCobertura.value) || 0;
+            const bcv = parseFloat(inputBcv.value) || 0;
+
+            const pvpUSD = calcularPVP(cNeto, flete, margen, cobertura);
+            const pvpVEF = pvpUSD * bcv;
+
+            testPvpResult.innerText = `$ ${pvpUSD.toFixed(2)} USD`;
+            testBsResult.innerText = `${pvpVEF.toLocaleString('es-VE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} VEF`;
+        }
+
+        [testCosto, testFlete, inputMargen, inputCobertura, inputBcv].forEach(el => {
+            el.addEventListener('input', recalcularTest);
+        });
+
+        // PRUEBA DE CONEXIÓN A TRAVÉS DEL PROXY LOCAL
+        document.getElementById('btn-test-wc').addEventListener('click', async () => {
+            const statusBox = document.getElementById('wc-status');
+            statusBox.classList.remove('hidden', 'status-success', 'status-error');
+            statusBox.innerText = "Conectando con WooCommerce a través del Proxy...";
+
+            try {
+                // Consulta directa al archivo local api.php
+                const response = await fetch('api.php?endpoint=products&per_page=1');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    statusBox.classList.add('status-success');
+                    statusBox.innerText = `🟢 ¡Conexión exitosa con WooCommerce! Se obtuvo el producto: "${data[0]?.name || 'Producto validado'}"`;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                statusBox.classList.add('status-error');
+                statusBox.innerText = `🔴 Error de Conexión: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>

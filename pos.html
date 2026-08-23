@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<!-- Dexie.js para IndexedDB -->
+	<script src="https://unpkg.com/dexie@3.2.4/dist/dexie.min.js"></script>
+    <title>DISCRETA.CBO - Punto de Venta</title>
+    <style>
+        :root {
+            --primary: #4a154b;
+            --bg: #121212;
+            --surface: #1e1e1e;
+            --surface-hover: #2a2a2a;
+            --text: #ffffff;
+            --text-muted: #aaaaaa;
+            --border: #333333;
+            --accent: #f39c12;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --info: #3498db;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+        /* HEADER */
+        .pos-header { height: 60px; background: #0a0a0a; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; flex-shrink: 0; }
+        .brand-box { display: flex; align-items: center; gap: 10px; }
+        .brand-logo { height: 38px; width: auto; object-fit: contain; filter: brightness(0) invert(1); }
+        .bcv-box { background: #1f1f1f; padding: 5px 12px; border-radius: 6px; border: 1px solid #333; font-size: 0.8rem; color: var(--text-muted); }
+        .bcv-box b { color: var(--success); }
+
+        .btn { padding: 8px 12px; border: none; border-radius: 6px; background: var(--primary); color: white; font-weight: bold; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 5px; }
+        .btn:hover { opacity: 0.9; }
+        .btn-secondary { background: #333; border: 1px solid #555; }
+        .btn-success { background: var(--success); color: #111; }
+        .btn-danger { background: var(--danger); }
+        .btn-copy { background: #222; border: 1px solid #444; color: var(--accent); padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; }
+        .btn-copy:hover { background: #333; }
+
+        /* LAYOUT PRINCIPAL 50% / 50% EN ESCRITORIO */
+        .pos-container { display: flex; flex: 1; overflow: hidden; }
+
+        .catalog-section { width: 50%; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: #151515; }
+        .cart-section { width: 50%; display: flex; flex-direction: column; background: #181818; }
+
+        @media (max-width: 768px) {
+            .pos-container { flex-direction: column; }
+            .catalog-section, .cart-section { width: 100%; height: 50%; }
+        }
+
+        /* BUSCADOR */
+        .search-bar { padding: 10px; background: #1a1a1a; border-bottom: 1px solid var(--border); }
+        .search-bar input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: #222; color: white; font-size: 0.95rem; outline: none; }
+        .search-bar input:focus { border-color: var(--accent); }
+
+        /* LISTA VERTICAL DE RESULTADOS */
+        .product-list { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+        .prod-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; cursor: pointer; transition: 0.15s; display: flex; align-items: center; gap: 12px; }
+        .prod-row:hover { border-color: var(--accent); background: var(--surface-hover); }
+        .prod-img { width: 45px; height: 45px; object-fit: cover; border-radius: 5px; background: #2a2a2a; flex-shrink: 0; }
+        .prod-sku { font-family: monospace; font-size: 0.75rem; color: var(--info); background: #111; padding: 2px 6px; border-radius: 4px; border: 1px solid #333; flex-shrink: 0; font-weight: bold; }
+        .prod-title { font-size: 0.85rem; font-weight: 600; color: #eee; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .prod-price { font-size: 0.95rem; font-weight: bold; color: var(--success); flex-shrink: 0; }
+
+        /* CARRITO */
+        .cart-header { padding: 12px; background: #111; border-bottom: 1px solid var(--border); font-weight: bold; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center; }
+        .cart-items { flex: 1; overflow-y: auto; padding: 10px; }
+        
+        .cart-item { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+        .cart-item-title { font-size: 0.82rem; font-weight: bold; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cart-qty-btn { width: 26px; height: 26px; border-radius: 4px; border: none; background: #333; color: white; font-weight: bold; cursor: pointer; }
+        .cart-qty-btn:hover { background: var(--primary); }
+
+        /* TOTALES Y PAGO MOVIL */
+        .cart-summary { padding: 14px; background: #0f0f0f; border-top: 1px solid var(--border); }
+        .summary-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-bottom: 4px; color: var(--text-muted); }
+        
+        .total-vef-box { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #333; display: flex; flex-direction: column; gap: 4px; }
+        .total-vef-label { font-size: 0.8rem; color: var(--accent); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        .total-vef-amount { font-size: 1.6rem; font-weight: 800; color: var(--success); text-align: right; line-height: 1; }
+
+        .btn-checkout { width: 100%; padding: 12px; font-size: 1rem; border-radius: 6px; margin-top: 12px; justify-content: center; }
+
+        /* MODAL COBRO */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; width: 100%; max-width: 480px; }
+        .payment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+        .pay-input { background: #111; border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+        .pay-input label { display: block; font-size: 0.75rem; color: var(--text-muted); }
+        .pay-input input { width: 100%; background: transparent; border: none; color: white; font-size: 1.1rem; font-weight: bold; outline: none; }
+        .change-box { background: #0a0a0a; padding: 10px; border-radius: 6px; text-align: center; border: 1px solid #333; }
+
+        .hidden { display: none !important; }
+		
+		/* ESTILOS DE MÉTODOS DE PAGO */
+        .methods-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .btn-method { background: #222; border: 1px solid var(--border); color: #ccc; padding: 6px 4px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: 0.2s; text-align: center; }
+        .btn-method:hover { background: #333; color: white; }
+        .btn-method.active { background: var(--primary); color: white; border-color: var(--accent); }
+        .pay-input.highlight { border-color: var(--accent); background: #252219; }
+    </style>
+</head>
+<body>
+
+    <header class="pos-header">
+        <div class="brand-box">
+            <img src="https://discretacbo.com/wp-content/uploads/2026/07/cropped-LOGO-NEGRO-SILUETA-3.png" alt="Discreta.cbo" class="brand-logo">
+            <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.75rem;" onclick="location.href='inventario.html'">📦 Inventario</button>
+        </div>
+
+        <div class="bcv-box">Tasa BCV: <b id="pos-tasa-bcv">779.95 Bs</b></div>
+
+        <button class="btn btn-secondary" onclick="cargarProductosPOS()">🔄 Recargar</button>
+		<div class="sync-status-box" id="sync-status" onclick="forzarSincronizacion()" style="cursor:pointer; font-size:0.8rem; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:4px; background:#222; border:1px solid #333;">
+    <span id="sync-icon">🟢</span>
+    <span id="sync-text">Online</span>
+    <span id="sync-badge" class="hidden" style="background:var(--accent); color:#000; font-weight:bold; border-radius:10px; padding:1px 6px; font-size:0.7rem;">0</span>
+</div>
+    </header>
+
+    <div class="pos-container">
+        <!-- CATALOGO 50% -->
+        <section class="catalog-section">
+            <div class="search-bar">
+                <input type="text" id="pos-search" placeholder="🔍 Escribe para buscar por Nombre o SKU..." oninput="filtrarCatalogo()" autofocus>
+            </div>
+            <div class="product-list" id="pos-list">
+                <div style="text-align:center; padding: 40px; color:#666; font-size:0.85rem;">
+                    Escribe en el buscador para ver coincidencias.
+                </div>
+            </div>
+        </section>
+
+        <!-- CARRITO 50% -->
+        <section class="cart-section">
+            <div class="cart-header">
+                <span>Orden de Venta</span>
+                <button class="btn btn-danger" style="padding:2px 6px; font-size:0.7rem;" onclick="vaciarCarrito()">Limpiar</button>
+            </div>
+
+            <div class="cart-items" id="cart-items-container">
+                <div style="text-align:center; padding:30px; color:#666; font-size:0.85rem;">El carrito está vacío</div>
+            </div>
+
+            <div class="cart-summary">
+                <div class="summary-row">
+                    <span>Subtotal ($ USD):</span>
+                    <span id="cart-total-usd" style="font-weight:bold; color:#fff;">$0.00</span>
+                </div>
+
+                <div class="total-vef-box">
+                    <div class="total-vef-label">
+                        <span>TOTAL A PAGAR (BS)</span>
+                        <button class="btn-copy" id="btn-copy-pm" onclick="copiarDatosPagoMovil()" disabled>📋 Copiar Pago Móvil</button>
+                    </div>
+                    <div class="total-vef-amount" id="cart-total-vef">0,00 Bs</div>
+                </div>
+
+                <button class="btn btn-success btn-checkout" id="btn-cobrar" onclick="abrirModalCobro()" disabled>💳 REGISTRAR PAGO</button>
+            </div>
+        </section>
+    </div>
+
+
+    <!-- MODAL DE COBRO RESTRUCTURADO -->
+    <div id="modal-cobro" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3 style="color:var(--accent); margin-bottom:5px;">💵 Procesar Cobro</h3>
+            <div style="font-size:0.85rem; color:#aaa; margin-bottom:12px;">
+                Total Venta: <b id="pay-total-target-usd" style="color:var(--accent); font-size:1.05rem;">$0.00</b> 
+                (<b id="pay-total-target-vef" style="color:var(--success); font-size:1.05rem;">0,00 Bs</b>)
+            </div>
+
+            <!-- BOTONES DE MÉTODOS DE PAGO -->
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:bold; display:block; margin-bottom:6px;">
+                SELECCIONA EL MÉTODO DE PAGO PRINCIPAL:
+            </label>
+            <div class="methods-grid">
+                <button type="button" class="btn-method active" data-method="pago_movil" onclick="seleccionarMetodo('pago_movil')">📱 Pago Móvil</button>
+                <button type="button" class="btn-method" data-method="divisas" onclick="seleccionarMetodo('divisas')">💵 Divisas (Efectivo)</button>
+                <button type="button" class="btn-method" data-method="tarjeta" onclick="seleccionarMetodo('tarjeta')">💳 Tarjeta (Punto)</button>
+                <button type="button" class="btn-method" data-method="binance" onclick="seleccionarMetodo('binance')">🟡 Binance</button>
+                <button type="button" class="btn-method" data-method="zelle" onclick="seleccionarMetodo('zelle')">🟣 Zelle</button>
+                <button type="button" class="btn-method" data-method="zinli" onclick="seleccionarMetodo('zinli')">🟠 Zinli</button>
+                <button type="button" class="btn-method" data-method="paypal" onclick="seleccionarMetodo('paypal')">🔵 PayPal</button>
+            </div>
+
+            <!-- INPUTS DE MONTOS (SE ENFOCA EL SELECCIONADO) -->
+            <div class="payment-grid" style="margin-top: 10px;">
+                <div class="pay-input" id="box-pago_movil">
+                    <label>Pago Móvil (Bs)</label>
+                    <input type="number" step="0.01" id="pay-pago_movil" placeholder="0.00" oninput="calcularVuelto()">
+                </div>
+                <div class="pay-input" id="box-divisas">
+                    <label>Divisas ($)</label>
+                    <input type="number" step="0.5" id="pay-divisas" placeholder="0.00" oninput="calcularVuelto()">
+                </div>
+                <div class="pay-input" id="box-tarjeta">
+                    <label>Tarjeta / Punto (Bs) <span style="font-size:0.65rem; color:#aaa;">(Caja Temp.)</span></label>
+                    <input type="number" step="0.01" id="pay-tarjeta" placeholder="0.00" oninput="calcularVuelto()">
+                </div>
+                <div class="pay-input" id="box-binance">
+                    <label>Binance ($)</label>
+                    <input type="number" step="0.01" id="pay-binance" placeholder="0.00" oninput="calcularVuelto()">
+                </div>
+                <div class="pay-input" id="box-zelle">
+                    <label>Zelle ($)</label>
+                    <input type="number" step="0.01" id="pay-zelle" placeholder="0.00" oninput="calcularVuelto()">
+                </div>
+                <div class="pay-input" id="box-zinli">
+                    <label>Zinli ($)</label>
+                    <input type="number" step="0.01" id="pay-zinli" placeholder="0.00" oninput="calcularVuelto()">
+                </div>
+                <div class="pay-input" id="box-paypal">
+                    <label>PayPal ($)</label>
+                    <input type="number" step="0.01" id="pay-paypal" placeholder="0.00" oninput="calcularVuelto()">
+                </div>
+            </div>
+
+            <div class="change-box" style="margin-top:10px;">
+                <div style="font-size:0.75rem; color:#888;">Estado del Pago:</div>
+                <div id="pay-vuelto-text" style="font-size:1.05rem; font-weight:bold; color:var(--info);">$0.00</div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
+                <button class="btn btn-secondary" onclick="cerrarModalCobro()">Cancelar</button>
+                <button class="btn btn-success" id="btn-finalizar-venta" onclick="finalizarVenta()">✅ Completar Venta</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+	
+	// 1. Inicializar Base de Datos en el Navegador
+const db = new Dexie("DiscretaPOS_DB");
+
+db.version(1).stores({
+    productos: 'id, name, sku', // Catálogo cacheado
+    ventas_pendientes: 'uuid, fecha, estado_sync' // Cola de ventas offline
+});
+
+// Función para generar UUID único por venta
+function generarUUID() {
+    return 'vta-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+	
+        let catalogo = [];
+        let carrito = [];
+        const tasaBCV = 779.95;
+        const imgPlaceholder = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" viewBox="0 0 24 24" fill="%23555"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+
+        const datosPagoMovilConfig = {
+            telefono: "04249111236",
+            cedula: "25394042",
+            banco: "Venezuela"
+        };
+
+        async function cargarProductosPOS() {
+    try {
+        // A. Cargar primero de la BD Local (Cero latencia)
+        const productosLocales = await db.productos.toArray();
+        if (productosLocales.length > 0) {
+            catalogo = productosLocales;
+            console.log(`📦 Catálogo local cargado: ${catalogo.length} productos.`);
+        }
+
+        // B. Intentar actualizar desde el servidor en segundo plano
+        const response = await fetch('api.php?endpoint=products&per_page=100');
+        if (response.ok) {
+            const productosRemotos = await response.json();
+            
+            // Reemplazar o guardar en BD Local
+            await db.productos.clear();
+            await db.productos.bulkPut(productosRemotos);
+            
+            catalogo = productosRemotos;
+            console.log("🔄 Catálogo local actualizado desde el servidor.");
+        }
+    } catch (err) {
+        console.warn("⚠️ Modo Offline activo. Usando catálogo guardado en local.", err);
+    }
+}
+
+        function filtrarCatalogo() {
+            const query = document.getElementById('pos-search').value.trim().toLowerCase();
+            const container = document.getElementById('pos-list');
+
+            if (query.length < 1) {
+                container.innerHTML = `<div style="text-align:center; padding: 40px; color:#666; font-size:0.85rem;">Escribe en el buscador para ver coincidencias.</div>`;
+                return;
+            }
+
+            const filtrados = catalogo.filter(p => 
+                p.name.toLowerCase().includes(query) || (p.sku && p.sku.toLowerCase().includes(query))
+            );
+
+            renderizarLista(filtrados);
+        }
+
+        function renderizarLista(lista) {
+            const container = document.getElementById('pos-list');
+            if (lista.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding: 30px; color:#888;">No se encontraron productos.</div>`;
+                return;
+            }
+
+            container.innerHTML = lista.map(p => {
+                const precio = parseFloat(p.price) || 0;
+                let imgUrl = imgPlaceholder;
+                if (p.images && p.images.length > 0 && p.images[0].src) {
+                    imgUrl = p.images[0].src.replace(/^http:\/\//i, 'https://');
+                }
+
+                // Obtener los últimos 4 dígitos del SKU (o N/A)
+                const fullSku = p.sku || 'N/A';
+                const last4Sku = fullSku.length > 4 ? fullSku.slice(-4) : fullSku;
+
+                return `
+                    <div class="prod-row" onclick="agregarAlCarrito(${p.id})">
+                        <img src="${imgUrl}" class="prod-img" alt="thumb" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='${imgPlaceholder}';">
+                        <span class="prod-sku">#${last4Sku}</span>
+                        <div class="prod-title">${p.name}</div>
+                        <div class="prod-price">$${precio.toFixed(2)}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function agregarAlCarrito(id) {
+            const prod = catalogo.find(p => p.id === id);
+            if (!prod) return;
+
+            const itemExistente = carrito.find(item => item.id === id);
+            if (itemExistente) {
+                itemExistente.cantidad++;
+            } else {
+                carrito.push({
+                    id: prod.id,
+                    name: prod.name,
+                    precio: parseFloat(prod.price) || 0,
+                    cantidad: 1
+                });
+            }
+            renderizarCarrito();
+        }
+
+        function cambiarCantidad(id, delta) {
+            const item = carrito.find(i => i.id === id);
+            if (!item) return;
+
+            item.cantidad += delta;
+            if (item.cantidad <= 0) {
+                carrito = carrito.filter(i => i.id !== id);
+            }
+            renderizarCarrito();
+        }
+
+        function vaciarCarrito() {
+            carrito = [];
+            renderizarCarrito();
+        }
+
+        function renderizarCarrito() {
+            const container = document.getElementById('cart-items-container');
+            const btnCobrar = document.getElementById('btn-cobrar');
+            const btnCopy = document.getElementById('btn-copy-pm');
+
+            if (carrito.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding:30px; color:#666; font-size:0.85rem;">El carrito está vacío</div>`;
+                document.getElementById('cart-total-usd').innerText = "$0.00";
+                document.getElementById('cart-total-vef').innerText = "0,00 Bs";
+                btnCobrar.disabled = true;
+                btnCopy.disabled = true;
+                return;
+            }
+
+            let totalUSD = 0;
+            container.innerHTML = carrito.map(item => {
+                const subtotal = item.precio * item.cantidad;
+                totalUSD += subtotal;
+                return `
+                    <div class="cart-item">
+                        <div class="cart-item-title">${item.name}</div>
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <button class="cart-qty-btn" onclick="cambiarCantidad(${item.id}, -1)">-</button>
+                            <span style="font-size:0.85rem; font-weight:bold; width:18px; text-align:center;">${item.cantidad}</span>
+                            <button class="cart-qty-btn" onclick="cambiarCantidad(${item.id}, 1)">+</button>
+                        </div>
+                        <div style="font-weight:bold; font-size:0.85rem; width:55px; text-align:right;">$${subtotal.toFixed(2)}</div>
+                    </div>
+                `;
+            }).join('');
+
+            const totalVEF = totalUSD * tasaBCV;
+            document.getElementById('cart-total-usd').innerText = `$${totalUSD.toFixed(2)}`;
+            document.getElementById('cart-total-vef').innerText = `${totalVEF.toLocaleString('es-VE', {minimumFractionDigits:2})} Bs`;
+            btnCobrar.disabled = false;
+            btnCopy.disabled = false;
+        }
+
+        function copiarDatosPagoMovil() {
+            const totalUSD = carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+            const totalVEF = (totalUSD * tasaBCV).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            const textoCopiar = `${datosPagoMovilConfig.telefono}\n${datosPagoMovilConfig.cedula}\n${datosPagoMovilConfig.banco}\n*${totalVEF} Bs*`;
+
+            navigator.clipboard.writeText(textoCopiar).then(() => {
+                const btnCopy = document.getElementById('btn-copy-pm');
+                btnCopy.innerText = "✅ ¡Copiado!";
+                setTimeout(() => { btnCopy.innerText = "📋 Copiar Pago Móvil"; }, 2000);
+            });
+        }
+
+        let metodoSeleccionado = 'pago_movil';
+
+        function seleccionarMetodo(metodo) {
+            metodoSeleccionado = metodo;
+            
+            // Resaltar botón activo
+            document.querySelectorAll('.btn-method').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.method === metodo);
+            });
+
+            // Resaltar recuadro de entrada
+            document.querySelectorAll('.pay-input').forEach(box => {
+                box.classList.remove('highlight');
+            });
+            const activeBox = document.getElementById(`box-${metodo}`);
+            if (activeBox) activeBox.classList.add('highlight');
+
+            // Autocompletar el monto exacto según la moneda del método
+            const totalUSD = carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+            const totalVEF = totalUSD * tasaBCV;
+
+            // Limpiar inputs
+            ['pago_movil', 'divisas', 'tarjeta', 'binance', 'zelle', 'zinli', 'paypal'].forEach(m => {
+                document.getElementById(`pay-${m}`).value = '';
+            });
+
+            // Asignar monto predeterminado según el método activo
+            if (metodo === 'pago_movil' || metodo === 'tarjeta') {
+                document.getElementById(`pay-${metodo}`).value = totalVEF.toFixed(2);
+            } else {
+                document.getElementById(`pay-${metodo}`).value = totalUSD.toFixed(2);
+            }
+
+            const inputFocus = document.getElementById(`pay-${metodo}`);
+            if (inputFocus) inputFocus.focus();
+
+            calcularVuelto();
+        }
+
+        function abrirModalCobro() {
+            const totalUSD = carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+            const totalVEF = totalUSD * tasaBCV;
+
+            document.getElementById('pay-total-target-usd').innerText = `$${totalUSD.toFixed(2)}`;
+            document.getElementById('pay-total-target-vef').innerText = `${totalVEF.toLocaleString('es-VE', {minimumFractionDigits:2})} Bs`;
+            
+            document.getElementById('modal-cobro').classList.remove('hidden');
+            
+            // Activar Pago Móvil por defecto
+            seleccionarMetodo('pago_movil');
+        }
+
+        function cerrarModalCobro() {
+            document.getElementById('modal-cobro').classList.add('hidden');
+        }
+
+        function calcularVuelto() {
+            const totalUSD = carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+
+            // Obtener valores ingresados
+            const pPM = (parseFloat(document.getElementById('pay-pago_movil').value) || 0) / tasaBCV;
+            const pTarjeta = (parseFloat(document.getElementById('pay-tarjeta').value) || 0) / tasaBCV;
+            const pDivisas = parseFloat(document.getElementById('pay-divisas').value) || 0;
+            const pBinance = parseFloat(document.getElementById('pay-binance').value) || 0;
+            const pZelle = parseFloat(document.getElementById('pay-zelle').value) || 0;
+            const pZinli = parseFloat(document.getElementById('pay-zinli').value) || 0;
+            const pPaypal = parseFloat(document.getElementById('pay-paypal').value) || 0;
+
+            const totalPagadoUSD = pPM + pTarjeta + pDivisas + pBinance + pZelle + pZinli + pPaypal;
+            const diferencia = totalPagadoUSD - totalUSD;
+            const vueltoBox = document.getElementById('pay-vuelto-text');
+
+            if (Math.abs(diferencia) < 0.01) {
+                vueltoBox.style.color = '#2ecc71';
+                vueltoBox.innerText = '✅ Pago Completo (Sin Cambio)';
+            } else if (diferencia > 0) {
+                const vueltoVEF = diferencia * tasaBCV;
+                vueltoBox.style.color = '#3498db';
+                vueltoBox.innerText = `Vuelto: $${diferencia.toFixed(2)} (${vueltoVEF.toLocaleString('es-VE', {minimumFractionDigits:2})} Bs)`;
+            } else {
+                const restanteUSD = Math.abs(diferencia);
+                const restanteVEF = restanteUSD * tasaBCV;
+                vueltoBox.style.color = '#e74c3c';
+                vueltoBox.innerText = `Resta: $${restanteUSD.toFixed(2)} (${restanteVEF.toLocaleString('es-VE', {minimumFractionDigits:2})} Bs)`;
+            }
+        }
+
+        async function finalizarVenta() {
+    const totalUSD = carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+    
+    // Objeto estructurado para la Venta y Tesorería
+    const ventaData = {
+        uuid: generarUUID(),
+        fecha: new Date().toISOString(),
+        estado_sync: "pendiente", // "pendiente" o "sincronizado"
+        total_usd: totalUSD,
+        total_vef: totalUSD * tasaBCV,
+        tasa_bcv: tasaBCV,
+        metodos_pago: {
+            pago_movil: parseFloat(document.getElementById('pay-pago_movil').value) || 0,
+            tarjeta_lote_pend: parseFloat(document.getElementById('pay-tarjeta').value) || 0,
+            divisas_efectivo: parseFloat(document.getElementById('pay-divisas').value) || 0,
+            binance: parseFloat(document.getElementById('pay-binance').value) || 0,
+            zelle: parseFloat(document.getElementById('pay-zelle').value) || 0,
+            zinli: parseFloat(document.getElementById('pay-zinli').value) || 0,
+            paypal: parseFloat(document.getElementById('pay-paypal').value) || 0
+        },
+        items: carrito.map(item => ({
+            id: item.id,
+            name: item.name,
+            precio: item.precio,
+            cantidad: item.cantidad,
+            subtotal: item.precio * item.cantidad
+        }))
+    };
+
+    try {
+        // Guardar en IndexedDB
+        await db.ventas_pendientes.add(ventaData);
+        
+        alert("✅ Venta registrada localmente con éxito.");
+        vaciarCarrito();
+        cerrarModalCobro();
+        
+        // Actualizar contador de pendientes si existe en UI
+        verificarVentasPendientes();
+
+    } catch (err) {
+        console.error("Error al guardar venta en local:", err);
+        alert("❌ Error al guardar la transacción.");
+    }
+}
+
+// Función auxiliar para saber cuántas ventas están en cola por subir
+async function verificarVentasPendientes() {
+    const pendientes = await db.ventas_pendientes.where({ estado_sync: "pendiente" }).count();
+    console.log(`📋 Ventas pendientes de sincronizar: ${pendientes}`);
+}
+
+        cargarProductosPOS();
+		
+		
+		
+	// ==========================================
+// FASE 2: MOTOR DE SINCRONIZACIÓN AUTOMÁTICA
+// ==========================================
+
+let sincronizando = false;
+
+// Listeners nativos de navegador para eventos de red
+window.addEventListener('online', () => {
+    actualizarEstadoRed(true);
+    sincronizarVentasPendientes();
+});
+
+window.addEventListener('offline', () => {
+    actualizarEstadoRed(false);
+});
+
+function actualizarEstadoRed(online) {
+    const icon = document.getElementById('sync-icon');
+    const text = document.getElementById('sync-text');
+    
+    if (online) {
+        icon.innerText = "🟢";
+        text.innerText = "Online";
+    } else {
+        icon.innerText = "🔴";
+        text.innerText = "Offline";
+    }
+}
+
+async function actualizarBadgePendientes() {
+    const badge = document.getElementById('sync-badge');
+    const pendientesCount = await db.ventas_pendientes.where({ estado_sync: "pendiente" }).count();
+
+    if (pendientesCount > 0) {
+        badge.innerText = `${pendientesCount} pend.`;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+async function sincronizarVentasPendientes() {
+    if (sincronizando || !navigator.onLine) return;
+
+    const pendientes = await db.ventas_pendientes.where({ estado_sync: "pendiente" }).toArray();
+    if (pendientes.length === 0) {
+        actualizarBadgePendientes();
+        return;
+    }
+
+    sincronizando = true;
+    const icon = document.getElementById('sync-icon');
+    const text = document.getElementById('sync-text');
+    
+    icon.innerText = "⏳";
+    text.innerText = "Sincronizando...";
+
+    try {
+        // Enviar cola de ventas al servidor mediante POST
+        const response = await fetch('api.php?endpoint=sync_sales', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ventas: pendientes })
+        });
+
+        if (response.ok) {
+            const resultado = await response.json();
+            
+            // Marcar localmente como sincronizadas o eliminarlas
+            if (resultado.procesadas && Array.isArray(resultado.procesadas)) {
+                for (const uuid of resultado.procesadas) {
+                    await db.ventas_pendientes.update(uuid, { estado_sync: "sincronizado" });
+                }
+            }
+            console.log("✅ Sincronización completada:", resultado);
+        }
+    } catch (err) {
+        console.warn("⚠️ No se pudo completar la sincronización:", err);
+    } finally {
+        sincronizando = false;
+        actualizarEstadoRed(navigator.onLine);
+        actualizarBadgePendientes();
+    }
+}
+
+function forzarSincronizacion() {
+    if (navigator.onLine) {
+        sincronizarVentasPendientes();
+    } else {
+        alert("Sin conexión a internet. Las ventas se sincronizarán al recuperar señal.");
+    }
+}
+
+// Bucle de sincronización pasivo cada 30 segundos si hay conexión
+setInterval(() => {
+    if (navigator.onLine) sincronizarVentasPendientes();
+}, 30000);
+
+// Actualizar conteo inicial al cargar pantalla
+actualizarBadgePendientes();
+actualizarEstadoRed(navigator.onLine);	
+    </script>
+</body>
+</html>
