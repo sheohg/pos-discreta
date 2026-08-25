@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DISCRETA.CBO - Control de Inventario y Lotes</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Librería XLSX para procesamiento de Excel en frontend -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script>
+        const user = JSON.parse(localStorage.getItem('pos_user') || '{}');
+        if (!user.rol || user.rol.toLowerCase() !== 'admin') {
+            alert('Acceso restringido: Este módulo requiere permisos de Administrador.');
+            window.location.href = 'pos.html';
+        }
+    </script>
     <style>
         :root {
             --primary: #4a154b;
@@ -25,11 +36,10 @@
         .inv-header { height: 60px; background: #0a0a0a; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; flex-shrink: 0; gap: 12px; }
         .inv-title { font-size: 1.1rem; font-weight: bold; color: var(--accent); white-space: nowrap; }
 
-        .search-container { display: flex; gap: 8px; flex: 1; max-width: 500px; }
-        input, select { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: #222; color: var(--text); font-size: 0.85rem; outline: none; }
-        input:focus { border-color: var(--primary); }
+        input, select { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: #222; color: var(--text); font-size: 0.85rem; outline: none; }
+        input:focus, select:focus { border-color: var(--primary); }
 
-        .btn { padding: 8px 12px; border: none; border-radius: 6px; background: var(--primary); color: white; font-weight: bold; font-size: 0.82rem; cursor: pointer; transition: 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+        .btn { padding: 6px 12px; border: none; border-radius: 6px; background: var(--primary); color: white; font-weight: bold; font-size: 0.82rem; cursor: pointer; transition: 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
         .btn:hover { opacity: 0.9; transform: translateY(-1px); }
         .btn-success { background: #27ae60; }
         .btn-secondary { background: #333; border: 1px solid #555; }
@@ -56,8 +66,8 @@
 
         .lote-tag { font-size: 0.75rem; color: #aaa; background: #222; padding: 2px 5px; border-radius: 3px; border: 1px solid #333; }
 
-        /* MODAL DE REGISTRO */
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        /* MODALES */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 1000; }
         .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
@@ -65,32 +75,65 @@
         .form-group label { display: block; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 3px; }
         .hidden { display: none !important; }
         .calc-box { background: #111; padding: 12px; border-radius: 8px; border: 1px solid #333; text-align: center; margin: 10px 0; }
+        .bcv-box-inv { background: #1a1a1a; padding: 4px 10px; border-radius: 6px; border: 1px solid #333; font-size: 0.85rem; color: var(--accent); display: flex; align-items: center; gap: 5px; }
+
+        /* FOOTER DE PAGINACIÓN */
+        .inv-footer { height: 48px; background: #0a0a0a; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; flex-shrink: 0; }
     </style>
 </head>
 <body>
 
-    <header class="inv-header">
-        <div style="display:flex; align-items:center; gap:10px;">
-            <button class="btn btn-secondary" onclick="location.href='pos.html'">⬅️ POS</button>
-            <span class="inv-title">📦 Inventario & Lotes</span>
-        </div>
+    <!-- Navbar Principal Global -->
+    <div id="navbar-container"></div>
 
-        <div class="search-container">
-            <input type="text" id="inv-search" placeholder="🔍 Buscar Título, SKU o Lote..." oninput="filtrarProductos()" style="width: 100%;">
-            <select id="inv-filter-stock" onchange="filtrarProductos()" style="width: 110px;">
-                <option value="todos">Todos</option>
-                <option value="con-stock">Con Stock</option>
-                <option value="sin-stock">Agotados</option>
-            </select>
-        </div>
+    <!-- Barra de Herramientas Exclusiva de Inventario -->
+    <div class="bg-dark text-white p-3 border-bottom border-secondary">
+        <div class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-3">
+            
+            <!-- Título del Módulo y Tasa BCV -->
+            <div class="d-flex align-items-center gap-3">
+                <h4 class="mb-0 fw-bold fs-5">📦 Inventario & Lotes</h4>
+                <div class="bcv-box-inv">
+                    <span>💵 BCV:</span>
+                    <strong id="inv-tasa-bcv">0.00 Bs</strong>
+                </div>
+            </div>
 
-        <div style="display:flex; gap:6px;">
-            <button class="btn btn-info" onclick="abrirModalSocios()">🤝 Socios</button>
-            <button class="btn btn-warning" onclick="abrirModalNuevoProducto()">➕ Nuevo Producto</button>
-            <button class="btn btn-success" id="btn-sync-wc" onclick="cargarProductosWC()">🔄 Sincronizar WC</button>
-        </div>
-    </header>
+            <!-- Buscador, Filtro y Registros por página -->
+            <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 550px;">
+                <input type="text" id="inv-search" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="🔍 Buscar Título, SKU o Lote..." oninput="filtrarProductos()">
+                <select id="inv-filter-stock" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="filtrarProductos()" style="width: 120px;">
+                    <option value="todos">Todos</option>
+                    <option value="con-stock">Con Stock</option>
+                    <option value="sin-stock">Agotados</option>
+                </select>
+                <select id="inv-per-page" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="cambiarRegistrosPorPagina()" style="width: 100px;">
+                    <option value="20">20 / pág</option>
+                    <option value="50" selected>50 / pág</option>
+                    <option value="100">100 / pág</option>
+                </select>
+            </div>
 
+            <!-- Acciones de Inventario -->
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button class="btn btn-sm btn-secondary text-white d-flex align-items-center gap-1" onclick="abrirModalExcel()">
+                    <i class="bi bi-file-earmark-excel-fill text-success"></i> 📊 Carga Masiva
+                </button>
+                <button class="btn btn-sm btn-info text-white d-flex align-items-center gap-1" onclick="abrirModalSocios()">
+                    <i class="bi bi-people-fill"></i> 🤝 Socios
+                </button>
+                <button class="btn btn-sm btn-warning d-flex align-items-center gap-1" onclick="abrirModalNuevoProducto()">
+                    <i class="bi bi-plus-lg"></i> ➕ Nuevo Producto
+                </button>
+                <button class="btn btn-sm btn-success d-flex align-items-center gap-1" id="btn-sync-wc" onclick="cargarProductosWC(1)">
+                    <i class="bi bi-arrow-repeat"></i> 🔄 Sincronizar WC
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Tabla Principal de Productos -->
     <div class="table-wrapper">
         <table class="excel-table">
             <thead>
@@ -120,11 +163,25 @@
         </table>
     </div>
 
-    <!-- MODAL REGISTRAR / EDITAR CON LOTE Y FECHA -->
+    <!-- FOOTER CON CONTROLES DE PAGINACIÓN -->
+    <div class="inv-footer">
+        <div style="font-size: 0.8rem; color: var(--text-muted);" id="pagination-info">
+            Mostrando 0 - 0 productos
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-secondary" id="btn-prev-page" onclick="cambiarPagina(-1)" disabled>◀ Anterior</button>
+            <span style="font-size: 0.85rem; font-weight: bold; color: var(--accent);" id="current-page-label">Página 1</span>
+            <button class="btn btn-sm btn-secondary" id="btn-next-page" onclick="cambiarPagina(1)" disabled>Siguiente ▶</button>
+        </div>
+    </div>
+
+    <!-- MODAL REGISTRAR / EDITAR -->
     <div id="modal-producto" class="modal-overlay hidden">
         <div class="modal-card">
             <h3 style="margin-bottom:12px; color:var(--accent);" id="modal-prod-title">➕ Registrar Producto y Lote</h3>
             <form id="form-nuevo-producto" onsubmit="guardarProducto(event)">
+                <input type="hidden" id="prod-id-edit" value="">
+
                 <div class="form-group">
                     <label>Nombre del Producto</label>
                     <input type="text" id="prod-nombre" required placeholder="Ej. Lencería Encaje Rojo">
@@ -194,7 +251,7 @@
 
                 <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
                     <button type="button" class="btn btn-secondary" onclick="cerrarModalNuevoProducto()">Cancelar</button>
-                    <button type="submit" class="btn btn-success">Guardar Lote Local</button>
+                    <button type="submit" class="btn btn-success" id="btn-guardar-modal">💾 Guardar en WC y BD</button>
                 </div>
             </form>
         </div>
@@ -222,26 +279,75 @@
         </div>
     </div>
 
+    <!-- MODAL DE CARGA MASIVA DE EXCEL / CSV -->
+    <div id="modal-excel" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width:550px;">
+            <h3 style="margin-bottom:12px; color:var(--accent);">📊 Carga Masiva de Productos y Lotes</h3>
+            <p style="font-size:0.82rem; color:#ccc; margin-bottom:15px;">
+                Selecciona un archivo <b>.xlsx, .xls o .csv</b> con el formato de columnas: <br>
+                <code>SKU | Nombre | Stock | Costo | Flete | Margen | PVP | Socio | Lote</code>
+            </p>
+            
+            <div class="form-group mb-3">
+                <input type="file" id="excel-file-input" class="form-control bg-dark text-white border-secondary" accept=".xlsx, .xls, .csv">
+            </div>
+
+            <div id="excel-preview-info" class="p-2 mb-3 rounded bg-dark border border-secondary text-info text-center hidden" style="font-size: 0.85rem;">
+                <!-- Resumen de registros leídos -->
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn btn-secondary" onclick="cerrarModalExcel()">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btn-importar-excel" onclick="procesarArchivoExcel()">🚀 Iniciar Importación</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let productosCache = [];
-        const tasaBCV = 779.95;
+        let tasaBCV = 0.0;
+        let paginaActual = 1;
+        let registrosPorPagina = 50;
         const imgPlaceholder = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="%23555"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
 
-        // Establecer fecha de hoy en el modal
         document.getElementById('prod-fecha-ingreso').value = new Date().toISOString().split('T')[0];
 
-        async function cargarProductosWC() {
+        // 1. CARGA DE TASA BCV DESDE LA API
+        async function cargarTasaBCV() {
+            try {
+                const response = await fetch('api.php?endpoint=get_bcv_rate');
+                const result = await response.json();
+
+                if (result.status === 200 && result.data && result.data.tasa_bcv) {
+                    tasaBCV = parseFloat(result.data.tasa_bcv);
+
+                    const elTasa = document.getElementById('inv-tasa-bcv');
+                    if (elTasa) {
+                        elTasa.innerText = `${tasaBCV.toFixed(2)} Bs`;
+                    }
+                }
+            } catch (error) {
+                console.error("Error al obtener la tasa BCV en inventario:", error);
+            }
+        }
+
+        // 2. OBTENER PRODUCTOS CON PAGINACIÓN DESDE WOOCOMMERCE VÍA API.PHP
+        async function cargarProductosWC(pagina = 1) {
+            await cargarTasaBCV();
+            paginaActual = pagina;
+
             const btnSync = document.getElementById('btn-sync-wc');
             const tbody = document.getElementById('inventory-tbody');
             btnSync.innerText = "⏳ Cargando...";
             btnSync.disabled = true;
 
             try {
-                const response = await fetch('api.php?endpoint=products&per_page=50');
-                if (!response.ok) throw new Error("Error consultando Proxy API");
+                const response = await fetch(`api.php?endpoint=products&page=${paginaActual}&per_page=${registrosPorPagina}`);
+                if (!response.ok) throw new Error("Error consultando la API WooCommerce");
 
                 productosCache = await response.json();
                 renderizarTabla(productosCache);
+                actualizarControlesPaginacion();
             } catch (err) {
                 tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; color:#e74c3c; padding:30px;">🔴 Error: ${err.message}</td></tr>`;
             } finally {
@@ -250,10 +356,34 @@
             }
         }
 
+        function cambiarRegistrosPorPagina() {
+            registrosPorPagina = parseInt(document.getElementById('inv-per-page').value) || 50;
+            cargarProductosWC(1);
+        }
+
+        function cambiarPagina(delta) {
+            const nuevaPag = paginaActual + delta;
+            if (nuevaPag >= 1) {
+                cargarProductosWC(nuevaPag);
+            }
+        }
+
+        function actualizarControlesPaginacion() {
+            document.getElementById('current-page-label').innerText = `Página ${paginaActual}`;
+            document.getElementById('btn-prev-page').disabled = (paginaActual <= 1);
+            document.getElementById('btn-next-page').disabled = (productosCache.length < registrosPorPagina);
+
+            const totalMostrados = productosCache.length;
+            const inicio = totalMostrados > 0 ? ((paginaActual - 1) * registrosPorPagina) + 1 : 0;
+            const fin = inicio + totalMostrados - 1;
+            document.getElementById('pagination-info').innerText = `Mostrando ${inicio} - ${fin} productos`;
+        }
+
+        // 3. RENDERIZAR TABLA CON DATOS
         function renderizarTabla(lista) {
             const tbody = document.getElementById('inventory-tbody');
-            if (lista.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding:30px; color:#888;">No hay productos encontrados.</td></tr>`;
+            if (!lista || lista.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding:30px; color:#888;">No hay productos encontrados en esta página.</td></tr>`;
                 return;
             }
 
@@ -270,13 +400,13 @@
 
                 const socio = p.meta_data?.find(m => m.key === '_socio')?.value || "ISDE";
                 const lote = p.meta_data?.find(m => m.key === '_lote')?.value || "LOTE-01";
-                const fechaIngreso = p.date_created ? p.date_created.substring(0, 10) : "2026-08-01";
+                const fechaIngreso = p.date_created ? p.date_created.substring(0, 10) : new Date().toISOString().split('T')[0];
                 
-                const costoNeto = parseFloat(p.meta_data?.find(m => m.key === '_costo_neto')?.value || (precioUSD * 0.35)).toFixed(2);
-                const flete = parseFloat(p.meta_data?.find(m => m.key === '_flete_unitario')?.value || 0.50).toFixed(2);
-                const margen = 70;
+                const costoNetoVal = parseFloat(p.meta_data?.find(m => m.key === '_costo_neto')?.value || (precioUSD * 0.35));
+                const fleteVal = parseFloat(p.meta_data?.find(m => m.key === '_flete_unitario')?.value || 0.50);
+                const margenVal = parseFloat(p.meta_data?.find(m => m.key === '_margen')?.value || 70);
+                
                 const montoIVA = (precioUSD * 0.16 / 1.16).toFixed(2);
-
                 const socioClass = socio === 'ISDE' ? 'socio-isde' : (socio === 'LUZ' ? 'socio-luz' : 'socio-cherry');
 
                 return `
@@ -292,9 +422,9 @@
                         </td>
                         <td style="text-align:center;"><span class="socio-badge ${socioClass}">${socio}</span></td>
                         <td style="text-align:center;"><span class="stock-badge ${isStockOk ? 'stock-in' : 'stock-out'}">${stock}</span></td>
-                        <td style="text-align:right; color:#e67e22;">$ ${costoNeto}</td>
-                        <td style="text-align:right; color:#e67e22;">$ ${flete}</td>
-                        <td style="text-align:right; color:#2ecc71;">${margen}%</td>
+                        <td style="text-align:right; color:#e67e22;">$ ${costoNetoVal.toFixed(2)}</td>
+                        <td style="text-align:right; color:#e67e22;">$ ${fleteVal.toFixed(2)}</td>
+                        <td style="text-align:right; color:#2ecc71;">${margenVal.toFixed(1)}%</td>
                         <td style="text-align:right; color:#3498db;">$ ${montoIVA}</td>
                         <td style="text-align:right; font-weight:bold; color:#2ecc71;">$ ${precioUSD.toFixed(2)}</td>
                         <td style="text-align:right; font-weight:bold; color:var(--accent);">${precioVEF.toLocaleString('es-VE', {minimumFractionDigits: 2})} Bs</td>
@@ -306,6 +436,7 @@
             }).join('');
         }
 
+        // 4. BÚSQUEDA Y FILTRADO LOCAL SOBRE LA PÁGINA ACTUAL
         function filtrarProductos() {
             const query = document.getElementById('inv-search').value.toLowerCase();
             const filterStock = document.getElementById('inv-filter-stock').value;
@@ -322,6 +453,7 @@
             renderizarTabla(filtrados);
         }
 
+        // 5. CÁLCULO DINÁMICO DE PRECIOS Y GANANCIAS EN MODAL
         function calcularPreciosModal(origen) {
             const cNeto = parseFloat(document.getElementById('prod-costo').value) || 0;
             const flete = parseFloat(document.getElementById('prod-flete').value) || 0;
@@ -341,7 +473,6 @@
             } else if (origen === 'inverso') {
                 const pvpManual = parseFloat(document.getElementById('prod-pvp-target').value) || 0;
                 const costoTotal = cNeto + flete;
-                
                 const precioConIva = pvpManual / (1 + cobertura / 100);
                 const precioBase = precioConIva / 1.16;
                 
@@ -370,35 +501,215 @@
             document.getElementById('modal-ganancia-desglose').innerText = txt;
         }
 
+        // 6. GUARDADO REAL EN WOOCOMMERCE & BASE DE DATOS (POST/PUT) - FIX RESPONSE & PAYLOAD
+		async function guardarProducto(e) {
+		e.preventDefault();
+		const btnGuardar = document.getElementById('btn-guardar-modal');
+		btnGuardar.innerText = "⏳ Guardando...";
+		btnGuardar.disabled = true;
+
+		const idEdit = document.getElementById('prod-id-edit').value;
+    
+		// Normalizar números (remueve comas por puntos)
+		const parseNum = (val) => String(val || 0).replace(',', '.');
+
+		const pvpTarget = parseFloat(parseNum(document.getElementById('prod-pvp-target').value)).toFixed(2);
+		const costoNeto = parseNum(document.getElementById('prod-costo').value);
+		const fleteUnit = parseNum(document.getElementById('prod-flete').value);
+		const margenVal = parseNum(document.getElementById('prod-margen').value);
+
+		// Estrutura limpia aceptada por WooCommerce REST API
+		const payload = {
+        name: document.getElementById('prod-nombre').value,
+        sku: document.getElementById('prod-sku').value,
+        regular_price: pvpTarget,
+        manage_stock: true,
+        stock_quantity: parseInt(document.getElementById('prod-stock').value || 0),
+        meta_data: [
+            { key: '_socio', value: document.getElementById('prod-socio').value },
+            { key: '_lote', value: document.getElementById('prod-lote').value || 'LOTE-LOCAL' },
+            { key: '_costo_neto', value: costoNeto },
+            { key: '_flete_unitario', value: fleteUnit },
+            { key: '_margen', value: margenVal }
+        ]
+    };
+
+    const endpoint = idEdit ? `api.php?endpoint=products/${idEdit}` : `api.php?endpoint=products`;
+    const method = idEdit ? 'PUT' : 'POST';
+
+    try {
+        const response = await fetch(endpoint, {
+            method: method,
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        // Leer como texto plano primero para evitar fallos si PHP devuelve respuesta vacía o HTML de error
+        const textResponse = await response.text();
+        let resData = {};
+
+        if (textResponse) {
+            try {
+                resData = JSON.parse(textResponse);
+            } catch (err) {
+                console.error("Respuesta no-JSON recibida del servidor:", textResponse);
+                throw new Error("El servidor no devolvió una respuesta JSON válida.");
+            }
+        }
+
+        if (!response.ok || resData.code) {
+            throw new Error(resData.message || `Error del servidor HTTP ${response.status}`);
+        }
+
+        alert(idEdit ? "¡Producto y lote actualizados exitosamente!" : "¡Nuevo producto y lote guardados correctamente!");
+        cerrarModalNuevoProducto();
+        cargarProductosWC(paginaActual);
+    } catch (error) {
+        alert("❌ Falló el guardado: " + error.message);
+    } finally {
+        btnGuardar.innerText = "💾 Guardar en WC y BD";
+        btnGuardar.disabled = false;
+    }
+}
+
+        // 7. CARGA MASIVA DE PRODUCTOS DESDE EXCEL / CSV
+        function abrirModalExcel() {
+            document.getElementById('excel-file-input').value = "";
+            document.getElementById('excel-preview-info').classList.add('hidden');
+            document.getElementById('modal-excel').classList.remove('hidden');
+        }
+
+        function cerrarModalExcel() {
+            document.getElementById('modal-excel').classList.add('hidden');
+        }
+
+        async function procesarArchivoExcel() {
+            const fileInput = document.getElementById('excel-file-input');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert("Por favor selecciona un archivo Excel (.xlsx, .csv).");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            const btnImport = document.getElementById('btn-importar-excel');
+            btnImport.innerText = "⏳ Procesando Excel...";
+            btnImport.disabled = true;
+
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet);
+
+                    if (jsonRows.length === 0) {
+                        alert("El archivo subido está vacío.");
+                        btnImport.innerText = "🚀 Iniciar Importación";
+                        btnImport.disabled = false;
+                        return;
+                    }
+
+                    let procesados = 0;
+                    for (const row of jsonRows) {
+                        const payload = {
+                            name: row['Nombre'] || row['NOMBRE'] || 'Producto Nuevo',
+                            sku: row['SKU'] || row['sku'] || '',
+                            regular_price: (row['PVP'] || row['pvp'] || 0).toString(),
+                            manage_stock: true,
+                            stock_quantity: parseInt(row['Stock'] || row['STOCK'] || 1),
+                            meta_data: [
+                                { key: '_socio', value: row['Socio'] || row['SOCIO'] || 'ISDE' },
+                                { key: '_lote', value: row['Lote'] || row['LOTE'] || 'LOTE-EXCEL' },
+                                { key: '_costo_neto', value: (row['Costo'] || row['COSTO'] || 0).toString() },
+                                { key: '_flete_unitario', value: (row['Flete'] || row['FLETE'] || 0.5).toString() },
+                                { key: '_margen', value: (row['Margen'] || row['MARGEN'] || 70).toString() }
+                            ]
+                        };
+
+                        await fetch('api.php?endpoint=products', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        procesados++;
+                    }
+
+                    alert(`¡Éxito! Se importaron ${procesados} productos exitosamente.`);
+                    cerrarModalExcel();
+                    cargarProductosWC(1);
+                } catch (err) {
+                    alert("Error leyendo el archivo Excel: " + err.message);
+                } finally {
+                    btnImport.innerText = "🚀 Iniciar Importación";
+                    btnImport.disabled = false;
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // FUNCIONES AUXILIARES DE MODALES
         function abrirModalNuevoProducto() {
+            document.getElementById('prod-id-edit').value = "";
             document.getElementById('modal-prod-title').innerText = "➕ Registrar Producto y Lote";
+            document.getElementById('form-nuevo-producto').reset();
+            document.getElementById('prod-fecha-ingreso').value = new Date().toISOString().split('T')[0];
+            document.getElementById('prod-costo').value = "5.00";
+            document.getElementById('prod-flete').value = "0.50";
+            document.getElementById('prod-margen').value = "70";
+            document.getElementById('prod-cobertura').value = "20";
+            document.getElementById('prod-stock').value = "1";
             document.getElementById('modal-producto').classList.remove('hidden');
             calcularPreciosModal('directo');
         }
-        function cerrarModalNuevoProducto() { document.getElementById('modal-producto').classList.add('hidden'); }
 
+        function cerrarModalNuevoProducto() { document.getElementById('modal-producto').classList.add('hidden'); }
         function abrirModalSocios() { document.getElementById('modal-socios').classList.remove('hidden'); }
         function cerrarModalSocios() { document.getElementById('modal-socios').classList.add('hidden'); }
-
-        function guardarProducto(e) {
-            e.preventDefault();
-            alert("¡Lote y datos del producto registrados exitosamente en la memoria local!");
-            cerrarModalNuevoProducto();
-        }
 
         function editarProducto(id) {
             const prod = productosCache.find(p => p.id === id);
             if (!prod) return;
 
+            document.getElementById('prod-id-edit').value = prod.id;
             document.getElementById('modal-prod-title').innerText = `✏️ Editar Lote: ${prod.name}`;
             document.getElementById('prod-nombre').value = prod.name;
             document.getElementById('prod-sku').value = prod.sku || '';
-            document.getElementById('prod-stock').value = prod.stock_quantity || 1;
+            document.getElementById('prod-stock').value = prod.stock_quantity !== null ? prod.stock_quantity : 1;
+            
+            const loteMeta = prod.meta_data?.find(m => m.key === '_lote')?.value || 'LOTE-01';
+            const socioMeta = prod.meta_data?.find(m => m.key === '_socio')?.value || 'ISDE';
+            const costoMeta = prod.meta_data?.find(m => m.key === '_costo_neto')?.value || (parseFloat(prod.price) * 0.35);
+            const fleteMeta = prod.meta_data?.find(m => m.key === '_flete_unitario')?.value || 0.50;
+            const margenMeta = prod.meta_data?.find(m => m.key === '_margen')?.value || 70;
+
+            document.getElementById('prod-lote').value = loteMeta;
+            document.getElementById('prod-socio').value = socioMeta;
+            document.getElementById('prod-costo').value = costoMeta;
+            document.getElementById('prod-flete').value = fleteMeta;
+            document.getElementById('prod-margen').value = margenMeta;
+            
+            if (prod.date_created) {
+                document.getElementById('prod-fecha-ingreso').value = prod.date_created.substring(0, 10);
+            }
+
             document.getElementById('prod-pvp-target').value = Math.ceil(parseFloat(prod.price) || 0);
 
             document.getElementById('modal-producto').classList.remove('hidden');
             calcularPreciosModal('inverso');
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarTasaBCV();
+        });
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="nav.js"></script>
 </body>
 </html>
